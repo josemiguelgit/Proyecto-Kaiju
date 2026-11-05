@@ -1,111 +1,125 @@
+
 package com.kaiju.inventario.viewmodel
 
 import androidx.lifecycle.ViewModel
-import com.kaiju.inventario.model.Producto
 import com.kaiju.inventario.model.FormularioProductoEstado
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import com.kaiju.inventario.repository.DatosDePrueba
+import com.kaiju.inventario.model.Producto
 import com.kaiju.inventario.repository.InventarioRepository
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 class InventarioViewModel : ViewModel() {
 
     private val repository = InventarioRepository()
 
     val productos = repository.productos
-
     val movimientos = repository.movimientos
+
+    val categorias = listOf(
+        "Poleras", "Pantalones", "Polerones",
+        "Chaquetas", "Camisas", "Vestidos",
+        "Shorts", "Faldas"
+    )
 
     private val _formulario = MutableStateFlow(
         FormularioProductoEstado()
     )
 
-    val formulario: StateFlow<FormularioProductoEstado> =
-        _formulario.asStateFlow()
+    val formulario = _formulario.asStateFlow()
 
-    // Actualizar campos del formulario
-    fun actualizarCodigo(valor: String) {
-        _formulario.value = _formulario.value.copy(
-            codigo = valor,
-            errores = emptyMap()
+    private var codigoEnEdicion: String? = null
+
+    fun prepararCreacion() {
+        codigoEnEdicion = null
+        _formulario.value = FormularioProductoEstado()
+    }
+
+    fun prepararEdicion(codigo: String) {
+        val producto = repository.buscarProducto(codigo)
+            ?: return
+
+        codigoEnEdicion = producto.codigo
+
+        _formulario.value = FormularioProductoEstado(
+            codigo = producto.codigo,
+            nombre = producto.nombre,
+            descripcion = producto.descripcion,
+            categoria = producto.categoria,
+            tipo = producto.tipo,
+            precio = producto.precio.toString(),
+            stock = producto.stockActual.toString(),
+            stockMinimo = producto.stockMinimo.toString(),
+            detalle = producto.detalle.orEmpty()
         )
     }
 
-    fun actualizarNombre(valor: String) {
-        _formulario.value = _formulario.value.copy(
-            nombre = valor,
-            errores = emptyMap()
+    fun actualizarCampo(campo: String, valor: String) {
+        val actual = _formulario.value
+
+        val nuevo = when (campo) {
+            "codigo" -> {
+                if (codigoEnEdicion != null) actual
+                else actual.copy(codigo = valor)
+            }
+            "nombre" -> actual.copy(nombre = valor)
+            "descripcion" -> actual.copy(descripcion = valor)
+            "categoria" -> actual.copy(categoria = valor)
+            "tipo" -> actual.copy(tipo = valor)
+            "precio" -> actual.copy(precio = valor)
+            "stock" -> {
+                if (codigoEnEdicion != null) actual
+                else actual.copy(stock = valor)
+            }
+            "stockMinimo" -> actual.copy(stockMinimo = valor)
+            "detalle" -> actual.copy(detalle = valor)
+            else -> actual
+        }
+
+        _formulario.value = nuevo.copy(
+            errores = nuevo.errores - campo
         )
     }
 
-    fun actualizarCategoria(valor: String) {
-        _formulario.value = _formulario.value.copy(
-            categoria = valor,
-            errores = emptyMap()
-        )
-    }
-
-    fun actualizarPrecio(valor: String) {
-        _formulario.value = _formulario.value.copy(
-            precio = valor,
-            errores = emptyMap()
-        )
-    }
-
-    fun actualizarStock(valor: String) {
-        _formulario.value = _formulario.value.copy(
-            stock = valor,
-            errores = emptyMap()
-        )
-    }
-
-    fun actualizarStockMinimo(valor: String) {
-        _formulario.value = _formulario.value.copy(
-            stockMinimo = valor,
-            errores = emptyMap()
-        )
-    }
-
-    // Validaciones del formulario
     fun validarFormulario(): Boolean {
-
         val datos = _formulario.value
         val errores = mutableMapOf<String, String>()
 
         if (datos.codigo.isBlank()) {
             errores["codigo"] = "El código es obligatorio"
         } else if (
+            codigoEnEdicion == null &&
             repository.buscarProducto(datos.codigo.trim()) != null
         ) {
             errores["codigo"] = "El código ya existe"
         }
 
-        if (datos.nombre.isBlank()) {
-            errores["nombre"] = "Ingrese el nombre del producto"
+        if (datos.nombre.trim().length < 3) {
+            errores["nombre"] =
+                "El nombre debe tener al menos 3 caracteres"
         }
 
-        if (datos.categoria.isBlank()) {
-            errores["categoria"] = "Ingrese una categoría"
+        if (datos.categoria !in categorias) {
+            errores["categoria"] = "Seleccione una categoría válida"
+        }
+
+        if (datos.tipo.isBlank()) {
+            errores["tipo"] = "Ingrese el tipo de prenda"
         }
 
         val precio = datos.precio.toIntOrNull()
-
         if (precio == null || precio <= 0) {
-            errores["precio"] = "El precio debe ser mayor que cero"
+            errores["precio"] = "Ingrese un precio entero mayor que 0"
         }
 
         val stock = datos.stock.toIntOrNull()
-
         if (stock == null || stock < 0) {
             errores["stock"] = "El stock no puede ser negativo"
         }
 
         val minimo = datos.stockMinimo.toIntOrNull()
-
         if (minimo == null || minimo < 0) {
             errores["stockMinimo"] =
-                "El stock mínimo debe ser mayor o igual a cero"
+                "El stock mínimo debe ser un entero no negativo"
         }
 
         _formulario.value = datos.copy(errores = errores)
@@ -113,37 +127,46 @@ class InventarioViewModel : ViewModel() {
         return errores.isEmpty()
     }
 
-    // Guardar producto
     fun guardarProducto(): Boolean {
-
-        if (!validarFormulario()) {
-            return false
-        }
+        if (!validarFormulario()) return false
 
         val datos = _formulario.value
 
-        val nuevoProducto = Producto(
-            codigo = datos.codigo.trim(),
+        val productoAnterior = codigoEnEdicion?.let {
+            repository.buscarProducto(it)
+        }
+
+        if (codigoEnEdicion != null && productoAnterior == null) {
+            return false
+        }
+
+        val producto = Producto(
+            codigo = productoAnterior?.codigo ?: datos.codigo.trim(),
             nombre = datos.nombre.trim(),
-            descripcion = "",
-            categoria = datos.categoria.trim(),
-            tipo = "General",
+            descripcion = datos.descripcion.trim(),
+            categoria = datos.categoria,
+            tipo = datos.tipo.trim(),
             precio = datos.precio.toInt(),
-            stockActual = datos.stock.toInt(),
+            stockActual = productoAnterior?.stockActual
+                ?: datos.stock.toInt(),
             stockMinimo = datos.stockMinimo.toInt(),
-            detalle = null
+            detalle = datos.detalle.trim().ifBlank { null }
         )
 
-        val guardado = repository.agregarProducto(nuevoProducto)
+        val guardado = if (productoAnterior != null) {
+            repository.editarProducto(producto)
+        } else {
+            repository.agregarProducto(producto)
+        }
 
         if (guardado) {
-            limpiarFormulario()
+            prepararCreacion()
         }
 
         return guardado
     }
 
     fun limpiarFormulario() {
-        _formulario.value = FormularioProductoEstado()
+        prepararCreacion()
     }
 }

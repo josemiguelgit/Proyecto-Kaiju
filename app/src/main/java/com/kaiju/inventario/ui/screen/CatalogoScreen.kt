@@ -1,29 +1,67 @@
+
 package com.kaiju.inventario.ui.screen
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.kaiju.inventario.ui.components.ProductoCard
 import com.kaiju.inventario.viewmodel.InventarioViewModel
 
 @Composable
-fun CatalogoScreen(viewModel: InventarioViewModel,
-                   onProductoClick: (String) -> Unit) {
-
+fun CatalogoScreen(
+    viewModel: InventarioViewModel,
+    onProductoClick: (String) -> Unit
+) {
     val productos by viewModel.productos.collectAsState()
 
-    var soloStockBajo by remember {
+    var busqueda by rememberSaveable {
+        mutableStateOf("")
+    }
+
+    var categoriaSeleccionada by rememberSaveable {
+        mutableStateOf("Todas")
+    }
+
+    var soloStockBajo by rememberSaveable {
         mutableStateOf(false)
     }
 
-    val productosVisibles = if (soloStockBajo) {
-        productos.filter { it.stockActual <= it.stockMinimo }
-    } else {
-        productos
+    // Obtener categorías disponibles
+    val categorias = listOf("Todas") +
+            productos.map { it.categoria }
+                .distinct()
+                .sorted()
+
+    // Aplicar búsqueda y filtros
+    val productosVisibles = productos.filter { producto ->
+
+        val coincideBusqueda =
+            producto.nombre.contains(
+                busqueda.trim(),
+                ignoreCase = true
+            ) ||
+                    producto.codigo.contains(
+                        busqueda.trim(),
+                        ignoreCase = true
+                    )
+
+        val coincideCategoria =
+            categoriaSeleccionada == "Todas" ||
+                    producto.categoria == categoriaSeleccionada
+
+        val coincideStock =
+            !soloStockBajo ||
+                    producto.stockActual <= producto.stockMinimo
+
+        coincideBusqueda &&
+                coincideCategoria &&
+                coincideStock
     }
 
     Column(
@@ -38,10 +76,45 @@ fun CatalogoScreen(viewModel: InventarioViewModel,
             style = MaterialTheme.typography.headlineSmall
         )
 
+        OutlinedTextField(
+            value = busqueda,
+            onValueChange = { busqueda = it },
+            label = { Text("Buscar producto") },
+            placeholder = {
+                Text("Nombre o código")
+            },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
+        )
+
+        Text(
+            text = "Categorías",
+            style = MaterialTheme.typography.titleSmall
+        )
+
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(categorias) { categoria ->
+
+                FilterChip(
+                    selected =
+                        categoriaSeleccionada == categoria,
+                    onClick = {
+                        categoriaSeleccionada = categoria
+                    },
+                    label = {
+                        Text(categoria)
+                    }
+                )
+            }
+        }
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
+
             Text("Mostrar solo stock bajo")
 
             Switch(
@@ -67,9 +140,12 @@ fun CatalogoScreen(viewModel: InventarioViewModel,
                 key = { it.codigo }
             ) { producto ->
 
-                ProductoCard(producto = producto, onClick = {
-                    onProductoClick(producto.codigo)
-                })
+                ProductoCard(
+                    producto = producto,
+                    onClick = {
+                        onProductoClick(producto.codigo)
+                    }
+                )
             }
         }
     }

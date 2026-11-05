@@ -40,4 +40,30 @@ class InventarioRepository {
 
         return true
     }
+
+
+    fun editarProducto(producto: Producto): Boolean {
+
+        val indice = _productos.value.indexOfFirst {
+            it.codigo.equals(
+                producto.codigo,
+                ignoreCase = true
+            )
+        }
+
+        if (indice == -1 ||
+            producto.precio <= 0 ||
+            producto.stockActual < 0 ||
+            producto.stockMinimo < 0
+        ) {
+            return false
+        }
+
+        _productos.value = _productos.value.toMutableList().apply {
+            this[indice] = producto
+        }
+
+        return true
+    }
+
 }

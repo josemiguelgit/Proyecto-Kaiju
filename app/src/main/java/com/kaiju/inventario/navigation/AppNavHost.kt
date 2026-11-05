@@ -62,7 +62,7 @@ fun AppNavHost(
                             onClick = {
                                 sesionViewModel.cerrarSesion()
                                 navController.navigate(Rutas.Login.ruta) {
-                                    popUpTo(Rutas.Catalogo.ruta) {
+                                    popUpTo(navController.graph.id) {
                                         inclusive = true
                                     }
                                     launchSingleTop = true
@@ -211,10 +211,18 @@ fun AppNavHost(
                     permitido = usuarioActivo != null,
                     onDenegado = { irCatalogo() }
                 ) {
+
                     PantallaDetalleProducto(
                         codigo = codigo,
-                        viewModel = inventarioViewModel
+                        viewModel = inventarioViewModel,
+                        puedeEditar = usuarioActivo?.rol == Rol.ADMINISTRADOR,
+                        onEditar = { codigoProducto ->
+                            navController.navigate(
+                                Rutas.EditarProducto.crearRuta(codigoProducto)
+                            )
+                        }
                     )
+
                 }
             }
 
@@ -233,6 +241,36 @@ fun AppNavHost(
                     )
                 }
             }
+
+
+            composable(
+                route = Rutas.EditarProducto.ruta,
+                arguments = listOf(
+                    navArgument("codigo") {
+                        type = NavType.StringType
+                    }
+                )
+            ) { entrada ->
+
+                val codigo = entrada.arguments
+                    ?.getString("codigo").orEmpty()
+
+                AccesoRestringido(
+                    permitido = usuarioActivo?.rol == Rol.ADMINISTRADOR,
+                    onDenegado = {
+                        redirigirSiNoAutorizado()
+                    }
+                ) {
+                    FormularioProductoScreen(
+                        viewModel = inventarioViewModel,
+                        codigoEdicion = codigo,
+                        onProductoGuardado = {
+                            irCatalogo()
+                        }
+                    )
+                }
+            }
+
 
             composable(Rutas.Movimiento.ruta) {
 

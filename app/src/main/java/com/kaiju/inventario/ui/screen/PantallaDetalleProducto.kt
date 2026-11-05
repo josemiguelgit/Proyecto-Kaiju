@@ -11,7 +11,9 @@ import com.kaiju.inventario.viewmodel.InventarioViewModel
 @Composable
 fun PantallaDetalleProducto(
     codigo: String,
-    viewModel: InventarioViewModel
+    viewModel: InventarioViewModel,
+    puedeEditar: Boolean,
+    onEditar: (String) -> Unit
 ) {
     val productos by viewModel.productos.collectAsState()
     val producto = productos.find { it.codigo == codigo }
@@ -40,6 +42,17 @@ fun PantallaDetalleProducto(
 
             producto.detalle?.let {
                 Text("Detalle: $it")
+            }
+
+            if (puedeEditar) {
+                Button(
+                    onClick = {
+                        onEditar(producto.codigo)
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Editar producto")
+                }
             }
 
             HorizontalDivider()

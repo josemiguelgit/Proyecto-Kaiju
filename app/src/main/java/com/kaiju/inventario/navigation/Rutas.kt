@@ -18,4 +18,11 @@ sealed class Rutas(val ruta: String) {
     data object Movimiento : Rutas("movimiento")
 
     data object Alertas : Rutas("alertas")
+
+    data object EditarProducto : Rutas("editar/{codigo}") {
+        fun crearRuta(codigo: String): String {
+            return "editar/$codigo"
+        }
+    }
+
 }
