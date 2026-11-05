@@ -6,17 +6,13 @@ import com.kaiju.inventario.model.FormularioProductoEstado
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import com.kaiju.inventario.repository.DatosDePrueba
 
 class ProductoViewModel : ViewModel() {
 
     // Lista mutable y privada
     private val _productos = MutableStateFlow(
-        listOf(
-            Producto("K001", "Teclado mecánico", "Periféricos", 25000, 10, 3),
-            Producto("K002", "Mouse gamer", "Periféricos", 15000, 2, 5),
-            Producto("K003", "Cable HDMI", "Accesorios", 7990, 18, 4),
-            Producto("K004", "Audífonos USB", "Audio", 19990, 1, 3)
-        )
+        DatosDePrueba.productos
     )
 
     // Estado público de solo lectura
@@ -132,10 +128,13 @@ class ProductoViewModel : ViewModel() {
         val nuevoProducto = Producto(
             codigo = datos.codigo.trim(),
             nombre = datos.nombre.trim(),
+            descripcion = "",
             categoria = datos.categoria.trim(),
+            tipo = "General",
             precio = datos.precio.toInt(),
-            stock = datos.stock.toInt(),
-            stockMinimo = datos.stockMinimo.toInt()
+            stockActual = datos.stock.toInt(),
+            stockMinimo = datos.stockMinimo.toInt(),
+            detalle = null
         )
 
         _productos.value = _productos.value + nuevoProducto

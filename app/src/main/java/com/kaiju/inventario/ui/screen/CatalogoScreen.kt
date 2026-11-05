@@ -20,7 +20,7 @@ fun CatalogoScreen(viewModel: ProductoViewModel) {
     }
 
     val productosVisibles = if (soloStockBajo) {
-        productos.filter { it.stock <= it.stockMinimo }
+        productos.filter { it.stockActual <= it.stockMinimo }
     } else {
         productos
     }

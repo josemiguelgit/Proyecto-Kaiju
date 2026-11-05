@@ -10,7 +10,7 @@ import com.kaiju.inventario.model.Producto
 @Composable
 fun ProductoCard(producto: Producto) {
 
-    val stockBajo = producto.stock <= producto.stockMinimo
+    val stockBajo = producto.stockActual <= producto.stockMinimo
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -42,7 +42,7 @@ fun ProductoCard(producto: Producto) {
             )
 
             Text(
-                text = "Stock disponible: ${producto.stock}"
+                text = "Stock disponible: ${producto.stockActual}"
             )
 
             if (stockBajo) {
