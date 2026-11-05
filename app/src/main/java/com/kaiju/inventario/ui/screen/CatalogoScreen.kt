@@ -8,10 +8,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.kaiju.inventario.ui.components.ProductoCard
-import com.kaiju.inventario.viewmodel.ProductoViewModel
+import com.kaiju.inventario.viewmodel.InventarioViewModel
 
 @Composable
-fun CatalogoScreen(viewModel: ProductoViewModel) {
+fun CatalogoScreen(viewModel: InventarioViewModel) {
 
     val productos by viewModel.productos.collectAsState()
 

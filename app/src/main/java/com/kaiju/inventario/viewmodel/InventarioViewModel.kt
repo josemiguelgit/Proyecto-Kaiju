@@ -7,16 +7,15 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import com.kaiju.inventario.repository.DatosDePrueba
+import com.kaiju.inventario.repository.InventarioRepository
 
-class ProductoViewModel : ViewModel() {
+class InventarioViewModel : ViewModel() {
 
-    // Lista mutable y privada
-    private val _productos = MutableStateFlow(
-        DatosDePrueba.productos
-    )
+    private val repository = InventarioRepository()
 
-    // Estado público de solo lectura
-    val productos: StateFlow<List<Producto>> = _productos.asStateFlow()
+    val productos = repository.productos
+
+    val movimientos = repository.movimientos
 
     private val _formulario = MutableStateFlow(
         FormularioProductoEstado()
@@ -77,9 +76,7 @@ class ProductoViewModel : ViewModel() {
         if (datos.codigo.isBlank()) {
             errores["codigo"] = "El código es obligatorio"
         } else if (
-            _productos.value.any {
-                it.codigo.equals(datos.codigo.trim(), ignoreCase = true)
-            }
+            repository.buscarProducto(datos.codigo.trim()) != null
         ) {
             errores["codigo"] = "El código ya existe"
         }
@@ -137,11 +134,13 @@ class ProductoViewModel : ViewModel() {
             detalle = null
         )
 
-        _productos.value = _productos.value + nuevoProducto
+        val guardado = repository.agregarProducto(nuevoProducto)
 
-        limpiarFormulario()
+        if (guardado) {
+            limpiarFormulario()
+        }
 
-        return true
+        return guardado
     }
 
     fun limpiarFormulario() {

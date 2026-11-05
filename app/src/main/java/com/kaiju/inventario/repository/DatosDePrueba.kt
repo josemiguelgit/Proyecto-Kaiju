@@ -2,6 +2,8 @@
 package com.kaiju.inventario.repository
 
 import com.kaiju.inventario.model.Producto
+import com.kaiju.inventario.model.Rol
+import com.kaiju.inventario.model.Usuario
 
 object DatosDePrueba {
     val productos = listOf(
@@ -116,5 +118,25 @@ object DatosDePrueba {
             detalle = "Talla S, color beige"
         )
     )
+
+    val usuarios = listOf(
+        Usuario(
+            id = "U001",
+            nombre = "Administrador Demo",
+            rol = Rol.ADMINISTRADOR
+        ),
+        Usuario(
+            id = "U002",
+            nombre = "Vendedor Demo",
+            rol = Rol.VENDEDOR
+        ),
+        Usuario(
+            id = "U003",
+            nombre = "Inventario Demo",
+            rol = Rol.ENCARGADO_INVENTARIO
+        )
+    )
+
+
 
 }

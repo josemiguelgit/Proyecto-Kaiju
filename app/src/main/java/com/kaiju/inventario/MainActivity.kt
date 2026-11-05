@@ -14,7 +14,7 @@ import com.kaiju.inventario.navigation.Rutas
 import com.kaiju.inventario.ui.screen.CatalogoScreen
 import com.kaiju.inventario.ui.screen.FormularioProductoScreen
 import com.kaiju.inventario.ui.theme.KaijuAppTheme
-import com.kaiju.inventario.viewmodel.ProductoViewModel
+import com.kaiju.inventario.viewmodel.InventarioViewModel
 
 class MainActivity : ComponentActivity() {
 
@@ -23,13 +23,13 @@ class MainActivity : ComponentActivity() {
 
         enableEdgeToEdge()
 
-        val productoViewModel = ViewModelProvider(this)[
-            ProductoViewModel::class.java
+        val inventarioViewModel = ViewModelProvider(this)[
+            InventarioViewModel::class.java
         ]
 
         setContent {
             KaijuAppTheme {
-                KaijuApp(productoViewModel)
+                KaijuApp(inventarioViewModel)
             }
         }
     }
@@ -37,7 +37,7 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun KaijuApp(viewModel: ProductoViewModel) {
+fun KaijuApp(viewModel: InventarioViewModel) {
 
     var rutaActual by rememberSaveable {
         mutableStateOf(Rutas.Catalogo.ruta)

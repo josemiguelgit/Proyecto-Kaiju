@@ -11,11 +11,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
-import com.kaiju.inventario.viewmodel.ProductoViewModel
+import com.kaiju.inventario.viewmodel.InventarioViewModel
 
 @Composable
 fun FormularioProductoScreen(
-    viewModel: ProductoViewModel,
+    viewModel: InventarioViewModel,
     onProductoGuardado: () -> Unit
 ) {
 
