@@ -1,3 +1,4 @@
+
 package com.kaiju.inventario
 
 import android.os.Bundle
@@ -5,16 +6,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.ViewModelProvider
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.ui.Modifier
-import com.kaiju.inventario.navigation.Rutas
-import com.kaiju.inventario.ui.screen.CatalogoScreen
-import com.kaiju.inventario.ui.screen.FormularioProductoScreen
+import com.kaiju.inventario.navigation.AppNavHost
 import com.kaiju.inventario.ui.theme.KaijuAppTheme
 import com.kaiju.inventario.viewmodel.InventarioViewModel
+import com.kaiju.inventario.viewmodel.SesionViewModel
 
 class MainActivity : ComponentActivity() {
 
@@ -27,88 +22,16 @@ class MainActivity : ComponentActivity() {
             InventarioViewModel::class.java
         ]
 
+        val sesionViewModel = ViewModelProvider(this)[
+            SesionViewModel::class.java
+        ]
+
         setContent {
             KaijuAppTheme {
-                KaijuApp(inventarioViewModel)
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun KaijuApp(viewModel: InventarioViewModel) {
-
-    var rutaActual by rememberSaveable {
-        mutableStateOf(Rutas.Catalogo.ruta)
-    }
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("KaijuApp") },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary
+                AppNavHost(
+                    inventarioViewModel = inventarioViewModel,
+                    sesionViewModel = sesionViewModel
                 )
-            )
-        },
-
-        bottomBar = {
-            NavigationBar {
-
-                NavigationBarItem(
-                    selected = rutaActual == Rutas.Catalogo.ruta,
-                    onClick = {
-                        rutaActual = Rutas.Catalogo.ruta
-                    },
-                    icon = {
-                        Text("▤")
-                    },
-                    label = {
-                        Text("Catálogo")
-                    }
-                )
-
-                NavigationBarItem(
-                    selected = rutaActual == Rutas.AgregarProducto.ruta,
-                    onClick = {
-                        rutaActual = Rutas.AgregarProducto.ruta
-                    },
-                    icon = {
-                        Text("+")
-                    },
-                    label = {
-                        Text("Agregar")
-                    }
-                )
-            }
-        }
-
-    ) { innerPadding ->
-
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-        ) {
-
-            when (rutaActual) {
-
-                Rutas.Catalogo.ruta -> {
-                    CatalogoScreen(
-                        viewModel = viewModel
-                    )
-                }
-
-                Rutas.AgregarProducto.ruta -> {
-                    FormularioProductoScreen(
-                        viewModel = viewModel,
-                        onProductoGuardado = {
-                            rutaActual = Rutas.Catalogo.ruta
-                        }
-                    )
-                }
             }
         }
     }

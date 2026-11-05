@@ -11,7 +11,8 @@ import com.kaiju.inventario.ui.components.ProductoCard
 import com.kaiju.inventario.viewmodel.InventarioViewModel
 
 @Composable
-fun CatalogoScreen(viewModel: InventarioViewModel) {
+fun CatalogoScreen(viewModel: InventarioViewModel,
+                   onProductoClick: (String) -> Unit) {
 
     val productos by viewModel.productos.collectAsState()
 
@@ -66,7 +67,9 @@ fun CatalogoScreen(viewModel: InventarioViewModel) {
                 key = { it.codigo }
             ) { producto ->
 
-                ProductoCard(producto = producto)
+                ProductoCard(producto = producto, onClick = {
+                    onProductoClick(producto.codigo)
+                })
             }
         }
     }

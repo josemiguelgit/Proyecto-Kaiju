@@ -6,14 +6,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.kaiju.inventario.model.Producto
+import androidx.compose.foundation.clickable
 
 @Composable
-fun ProductoCard(producto: Producto) {
+fun ProductoCard(producto: Producto,
+                 onClick: () -> Unit = {}) {
 
     val stockBajo = producto.stockActual <= producto.stockMinimo
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         elevation = CardDefaults.cardElevation(
             defaultElevation = 2.dp
         )
