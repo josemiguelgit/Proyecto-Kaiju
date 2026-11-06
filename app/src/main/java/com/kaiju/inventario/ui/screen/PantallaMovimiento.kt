@@ -15,6 +15,8 @@ import com.kaiju.inventario.model.Rol
 import com.kaiju.inventario.model.TipoMovimiento
 import com.kaiju.inventario.model.Usuario
 import com.kaiju.inventario.viewmodel.InventarioViewModel
+import androidx.compose.ui.platform.LocalContext
+import com.kaiju.inventario.utils.VibracionUtils
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -24,6 +26,7 @@ fun PantallaMovimiento(
 ) {
     val formulario by viewModel.formularioMovimiento.collectAsState()
     val productos by viewModel.productos.collectAsState()
+    val context = LocalContext.current
 
     var mensajeExito by remember {
         mutableStateOf(false)
@@ -288,15 +291,39 @@ fun PantallaMovimiento(
             )
         }
 
+
         Button(
             onClick = {
+
                 viewModel.guardarMovimiento(usuario) { guardado ->
+
                     mensajeExito = guardado
+
+                    if (!guardado) {
+
+                        val errores =
+                            viewModel.formularioMovimiento.value.errores
+
+                        val errorCantidad =
+                            errores["cantidad"].orEmpty()
+
+                        val errorGeneral =
+                            errores["general"].orEmpty()
+
+                        val stockInsuficiente =
+                            errorCantidad.startsWith("Stock insuficiente") ||
+                                    errorGeneral.startsWith("Stock insuficiente")
+
+                        if (stockInsuficiente) {
+                            VibracionUtils.vibrarError(context)
+                        }
+                    }
                 }
             },
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Registrar movimiento")
         }
+
     }
 }
