@@ -271,16 +271,23 @@ fun AppNavHost(
                 }
             }
 
-
             composable(Rutas.Movimiento.ruta) {
 
                 AccesoRestringido(
                     permitido = usuarioActivo != null,
-                    onDenegado = { irCatalogo() }
+                    onDenegado = {
+                        redirigirSiNoAutorizado()
+                    }
                 ) {
-                    PantallaMovimiento()
+                    usuarioActivo?.let { usuario ->
+                        PantallaMovimiento(
+                            viewModel = inventarioViewModel,
+                            usuario = usuario
+                        )
+                    }
                 }
             }
+
 
             composable(Rutas.Alertas.ruta) {
 

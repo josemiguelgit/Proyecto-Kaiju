@@ -1,4 +1,3 @@
-
 package com.kaiju.inventario.model
 
 enum class TipoMovimiento {
@@ -8,6 +7,11 @@ enum class TipoMovimiento {
     AJUSTE
 }
 
+enum class SentidoAjuste {
+    AUMENTO,
+    DISMINUCION
+}
+
 data class Movimiento(
     val id: String,
     val codigoProducto: String,
@@ -15,5 +19,6 @@ data class Movimiento(
     val cantidad: Int,
     val motivo: String? = null,
     val fecha: Long,
-    val usuario: String
+    val usuario: String,
+    val sentidoAjuste: SentidoAjuste? = null
 )

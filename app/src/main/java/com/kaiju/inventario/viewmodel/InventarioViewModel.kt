@@ -7,6 +7,10 @@ import com.kaiju.inventario.model.Producto
 import com.kaiju.inventario.repository.InventarioRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import com.kaiju.inventario.model.FormularioMovimientoEstado
+import com.kaiju.inventario.model.SentidoAjuste
+import com.kaiju.inventario.model.TipoMovimiento
+import com.kaiju.inventario.model.Usuario
 
 class InventarioViewModel : ViewModel() {
 
@@ -169,4 +173,150 @@ class InventarioViewModel : ViewModel() {
     fun limpiarFormulario() {
         prepararCreacion()
     }
+
+
+    private val _formularioMovimiento = MutableStateFlow(
+        FormularioMovimientoEstado()
+    )
+
+    val formularioMovimiento = _formularioMovimiento.asStateFlow()
+
+    fun actualizarCampoMovimiento(campo: String, valor: String) {
+        val actual = _formularioMovimiento.value
+
+        val nuevo = when (campo) {
+            "codigoProducto" -> actual.copy(codigoProducto = valor)
+            "tipo" -> actual.copy(
+                tipo = valor,
+                sentidoAjuste = "",
+                motivo = ""
+            )
+            "cantidad" -> actual.copy(cantidad = valor)
+            "sentidoAjuste" -> actual.copy(sentidoAjuste = valor)
+            "motivo" -> actual.copy(motivo = valor)
+            else -> actual
+        }
+
+        _formularioMovimiento.value = nuevo.copy(
+            errores = emptyMap()
+        )
+    }
+
+    fun validarFormularioMovimiento(): Boolean {
+
+        val datos = _formularioMovimiento.value
+        val errores = mutableMapOf<String, String>()
+
+        val producto = repository.buscarProducto(
+            datos.codigoProducto
+        )
+
+        if (producto == null) {
+            errores["codigoProducto"] = "Seleccione un producto"
+        }
+
+        val tipo = TipoMovimiento.entries.firstOrNull {
+            it.name == datos.tipo
+        }
+
+        if (tipo == null) {
+            errores["tipo"] = "Seleccione un tipo de movimiento"
+        }
+
+        val cantidad = datos.cantidad.toIntOrNull()
+
+        if (cantidad == null || cantidad <= 0) {
+            errores["cantidad"] =
+                "Ingrese una cantidad entera mayor que cero"
+        }
+
+        val sentido = SentidoAjuste.entries.firstOrNull {
+            it.name == datos.sentidoAjuste
+        }
+
+        if (tipo == TipoMovimiento.AJUSTE) {
+            if (sentido == null) {
+                errores["sentidoAjuste"] =
+                    "Seleccione aumentar o disminuir"
+            }
+
+            if (datos.motivo.isBlank()) {
+                errores["motivo"] =
+                    "El motivo del ajuste es obligatorio"
+            }
+        }
+
+        val esSalida = tipo == TipoMovimiento.SALIDA_VENTA ||
+                tipo == TipoMovimiento.SALIDA_CONSUMO ||
+                (
+                        tipo == TipoMovimiento.AJUSTE &&
+                                sentido == SentidoAjuste.DISMINUCION
+                        )
+
+        if (producto != null && cantidad != null && esSalida) {
+            if (cantidad > producto.stockActual) {
+                errores["cantidad"] =
+                    "Stock insuficiente. Disponible: ${producto.stockActual}"
+            }
+        }
+
+        _formularioMovimiento.value = datos.copy(
+            errores = errores
+        )
+
+        return errores.isEmpty()
+    }
+
+    fun guardarMovimiento(usuario: Usuario?): Boolean {
+
+        if (!validarFormularioMovimiento()) {
+            return false
+        }
+
+        if (usuario == null) {
+            _formularioMovimiento.value =
+                _formularioMovimiento.value.copy(
+                    errores = mapOf(
+                        "general" to "Debe iniciar sesión"
+                    )
+                )
+            return false
+        }
+
+        val datos = _formularioMovimiento.value
+
+        val tipo = TipoMovimiento.valueOf(datos.tipo)
+
+        val sentido = if (tipo == TipoMovimiento.AJUSTE) {
+            SentidoAjuste.valueOf(datos.sentidoAjuste)
+        } else {
+            null
+        }
+
+        val error = repository.registrarMovimiento(
+            codigoProducto = datos.codigoProducto,
+            tipo = tipo,
+            cantidad = datos.cantidad.toInt(),
+            motivo = datos.motivo,
+            sentidoAjuste = sentido,
+            usuario = usuario
+        )
+
+        if (error != null) {
+            _formularioMovimiento.value = datos.copy(
+                errores = mapOf("general" to error)
+            )
+            return false
+        }
+
+        limpiarFormularioMovimiento()
+
+        return true
+    }
+
+    fun limpiarFormularioMovimiento() {
+        _formularioMovimiento.value = FormularioMovimientoEstado()
+    }
+
+
 }
