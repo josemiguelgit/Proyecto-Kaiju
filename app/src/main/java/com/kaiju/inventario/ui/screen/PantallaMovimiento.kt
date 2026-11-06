@@ -290,7 +290,9 @@ fun PantallaMovimiento(
 
         Button(
             onClick = {
-                mensajeExito = viewModel.guardarMovimiento(usuario)
+                viewModel.guardarMovimiento(usuario) { guardado ->
+                    mensajeExito = guardado
+                }
             },
             modifier = Modifier.fillMaxWidth()
         ) {

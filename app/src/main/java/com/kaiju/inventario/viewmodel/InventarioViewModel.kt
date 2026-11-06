@@ -11,15 +11,39 @@ import com.kaiju.inventario.model.FormularioMovimientoEstado
 import com.kaiju.inventario.model.SentidoAjuste
 import com.kaiju.inventario.model.TipoMovimiento
 import com.kaiju.inventario.model.Usuario
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
-class InventarioViewModel : ViewModel() {
 
-    private val repository = InventarioRepository()
+    class InventarioViewModel(
+        private val repository: InventarioRepository
+    ) : ViewModel() {
 
-    val productos = repository.productos
-    val movimientos = repository.movimientos
+        private var guardandoProducto = false
+        private var guardandoMovimiento = false
 
-    val categorias = listOf(
+        val productos = repository.productos.stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+        val movimientos = repository.movimientos.stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+        init {
+            viewModelScope.launch {
+                repository.inicializarDatos()
+            }
+        }
+
+
+        val categorias = listOf(
         "Poleras", "Pantalones", "Polerones",
         "Chaquetas", "Camisas", "Vestidos",
         "Shorts", "Faldas"
@@ -38,26 +62,31 @@ class InventarioViewModel : ViewModel() {
         _formulario.value = FormularioProductoEstado()
     }
 
-    fun prepararEdicion(codigo: String) {
-        val producto = repository.buscarProducto(codigo)
-            ?: return
 
-        codigoEnEdicion = producto.codigo
+        fun prepararEdicion(codigo: String) {
+            codigoEnEdicion = codigo
+            _formulario.value = FormularioProductoEstado()
 
-        _formulario.value = FormularioProductoEstado(
-            codigo = producto.codigo,
-            nombre = producto.nombre,
-            descripcion = producto.descripcion,
-            categoria = producto.categoria,
-            tipo = producto.tipo,
-            precio = producto.precio.toString(),
-            stock = producto.stockActual.toString(),
-            stockMinimo = producto.stockMinimo.toString(),
-            detalle = producto.detalle.orEmpty()
-        )
-    }
+            viewModelScope.launch {
+                val producto = repository.buscarProducto(codigo)
+                    ?: return@launch
 
-    fun actualizarCampo(campo: String, valor: String) {
+                _formulario.value = FormularioProductoEstado(
+                    codigo = producto.codigo,
+                    nombre = producto.nombre,
+                    descripcion = producto.descripcion,
+                    categoria = producto.categoria,
+                    tipo = producto.tipo,
+                    precio = producto.precio.toString(),
+                    stock = producto.stockActual.toString(),
+                    stockMinimo = producto.stockMinimo.toString(),
+                    detalle = producto.detalle.orEmpty()
+                )
+            }
+        }
+
+
+        fun actualizarCampo(campo: String, valor: String) {
         val actual = _formulario.value
 
         val nuevo = when (campo) {
@@ -92,7 +121,12 @@ class InventarioViewModel : ViewModel() {
             errores["codigo"] = "El código es obligatorio"
         } else if (
             codigoEnEdicion == null &&
-            repository.buscarProducto(datos.codigo.trim()) != null
+            productos.value.any {
+                it.codigo.equals(
+                    datos.codigo.trim(),
+                    ignoreCase = true
+                )
+            }
         ) {
             errores["codigo"] = "El código ya existe"
         }
@@ -131,46 +165,93 @@ class InventarioViewModel : ViewModel() {
         return errores.isEmpty()
     }
 
-    fun guardarProducto(): Boolean {
-        if (!validarFormulario()) return false
+        fun guardarProducto(onResultado: (Boolean) -> Unit) {
 
-        val datos = _formulario.value
+            // Validar el formulario antes de guardar
+            if (!validarFormulario()) {
+                onResultado(false)
+                return
+            }
 
-        val productoAnterior = codigoEnEdicion?.let {
-            repository.buscarProducto(it)
+            // Evitar guardados simultáneos
+            if (guardandoProducto) return
+            guardandoProducto = true
+
+            val datos = _formulario.value
+            val codigoEdicionActual = codigoEnEdicion
+
+            viewModelScope.launch {
+                try {
+                    // Buscar producto si estamos editando
+                    val anterior = codigoEdicionActual?.let {
+                        repository.buscarProducto(it)
+                    }
+
+                    if (codigoEdicionActual != null && anterior == null) {
+                        _formulario.value = datos.copy(
+                            errores = mapOf(
+                                "general" to "Producto no encontrado"
+                            )
+                        )
+
+                        onResultado(false)
+                        return@launch
+                    }
+
+                    // Construir producto con los datos validados
+                    val nuevoProducto = Producto(
+                        codigo = anterior?.codigo ?: datos.codigo.trim(),
+                        nombre = datos.nombre.trim(),
+                        descripcion = datos.descripcion.trim(),
+                        categoria = datos.categoria,
+                        tipo = datos.tipo.trim(),
+                        precio = datos.precio.toInt(),
+                        stockActual = anterior?.stockActual
+                            ?: datos.stock.toInt(),
+                        stockMinimo = datos.stockMinimo.toInt(),
+                        detalle = datos.detalle.trim().ifBlank { null }
+                    )
+
+                    // Crear o editar mediante Room
+                    val resultado = if (anterior != null) {
+                        repository.editarProducto(nuevoProducto)
+                    } else {
+                        repository.agregarProducto(nuevoProducto)
+                    }
+
+                    if (resultado) {
+                        prepararCreacion()
+                    } else {
+                        _formulario.value = datos.copy(
+                            errores = mapOf(
+                                "general" to "No se pudo guardar el producto"
+                            )
+                        )
+                    }
+
+                    onResultado(resultado)
+
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+
+                } catch (e: Exception) {
+                    _formulario.value = datos.copy(
+                        errores = mapOf(
+                            "general" to "Error inesperado al guardar el producto"
+                        )
+                    )
+                    onResultado(false)
+
+                } finally {
+                    // Permitir futuros guardados
+                    guardandoProducto = false
+                }
+            }
         }
 
-        if (codigoEnEdicion != null && productoAnterior == null) {
-            return false
-        }
 
-        val producto = Producto(
-            codigo = productoAnterior?.codigo ?: datos.codigo.trim(),
-            nombre = datos.nombre.trim(),
-            descripcion = datos.descripcion.trim(),
-            categoria = datos.categoria,
-            tipo = datos.tipo.trim(),
-            precio = datos.precio.toInt(),
-            stockActual = productoAnterior?.stockActual
-                ?: datos.stock.toInt(),
-            stockMinimo = datos.stockMinimo.toInt(),
-            detalle = datos.detalle.trim().ifBlank { null }
-        )
 
-        val guardado = if (productoAnterior != null) {
-            repository.editarProducto(producto)
-        } else {
-            repository.agregarProducto(producto)
-        }
-
-        if (guardado) {
-            prepararCreacion()
-        }
-
-        return guardado
-    }
-
-    fun limpiarFormulario() {
+        fun limpiarFormulario() {
         prepararCreacion()
     }
 
@@ -207,9 +288,12 @@ class InventarioViewModel : ViewModel() {
         val datos = _formularioMovimiento.value
         val errores = mutableMapOf<String, String>()
 
-        val producto = repository.buscarProducto(
-            datos.codigoProducto
-        )
+        val producto = productos.value.find {
+            it.codigo.equals(
+                datos.codigoProducto,
+                ignoreCase = true
+            )
+        }
 
         if (producto == null) {
             errores["codigoProducto"] = "Seleccione un producto"
@@ -267,54 +351,97 @@ class InventarioViewModel : ViewModel() {
         return errores.isEmpty()
     }
 
-    fun guardarMovimiento(usuario: Usuario?): Boolean {
 
-        if (!validarFormularioMovimiento()) {
-            return false
-        }
 
-        if (usuario == null) {
-            _formularioMovimiento.value =
-                _formularioMovimiento.value.copy(
-                    errores = mapOf(
-                        "general" to "Debe iniciar sesión"
+        fun guardarMovimiento(
+            usuario: Usuario?,
+            onResultado: (Boolean) -> Unit
+        ) {
+
+            // Evitar registrar el mismo movimiento varias veces
+            if (guardandoMovimiento) return
+
+            // Validar formulario
+            if (!validarFormularioMovimiento()) {
+                onResultado(false)
+                return
+            }
+
+            // Verificar sesión activa
+            if (usuario == null) {
+                _formularioMovimiento.value =
+                    _formularioMovimiento.value.copy(
+                        errores = mapOf(
+                            "general" to "Debe iniciar sesión"
+                        )
                     )
-                )
-            return false
+
+                onResultado(false)
+                return
+            }
+
+            guardandoMovimiento = true
+
+            val datos = _formularioMovimiento.value
+
+            val tipo = TipoMovimiento.valueOf(datos.tipo)
+
+            val sentido = if (tipo == TipoMovimiento.AJUSTE) {
+                SentidoAjuste.valueOf(datos.sentidoAjuste)
+            } else {
+                null
+            }
+
+            viewModelScope.launch {
+                try {
+                    // Registrar movimiento mediante Room
+                    val error = repository.registrarMovimiento(
+                        codigoProducto = datos.codigoProducto,
+                        tipo = tipo,
+                        cantidad = datos.cantidad.toInt(),
+                        motivo = datos.motivo,
+                        sentidoAjuste = sentido,
+                        usuario = usuario
+                    )
+
+                    if (error == null) {
+                        // Registro exitoso
+                        limpiarFormularioMovimiento()
+                        onResultado(true)
+
+                    } else {
+                        // Error de validación o regla de negocio
+                        _formularioMovimiento.value = datos.copy(
+                            errores = mapOf(
+                                "general" to error
+                            )
+                        )
+
+                        onResultado(false)
+                    }
+
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+
+                } catch (e: Exception) {
+                    _formularioMovimiento.value = datos.copy(
+                        errores = mapOf(
+                            "general" to "Error inesperado al registrar el movimiento"
+                        )
+                    )
+
+                    onResultado(false)
+
+                } finally {
+                    // Permitir registrar otro movimiento
+                    guardandoMovimiento = false
+                }
+            }
         }
 
-        val datos = _formularioMovimiento.value
 
-        val tipo = TipoMovimiento.valueOf(datos.tipo)
 
-        val sentido = if (tipo == TipoMovimiento.AJUSTE) {
-            SentidoAjuste.valueOf(datos.sentidoAjuste)
-        } else {
-            null
-        }
-
-        val error = repository.registrarMovimiento(
-            codigoProducto = datos.codigoProducto,
-            tipo = tipo,
-            cantidad = datos.cantidad.toInt(),
-            motivo = datos.motivo,
-            sentidoAjuste = sentido,
-            usuario = usuario
-        )
-
-        if (error != null) {
-            _formularioMovimiento.value = datos.copy(
-                errores = mapOf("general" to error)
-            )
-            return false
-        }
-
-        limpiarFormularioMovimiento()
-
-        return true
-    }
-
-    fun limpiarFormularioMovimiento() {
+        fun limpiarFormularioMovimiento() {
         _formularioMovimiento.value = FormularioMovimientoEstado()
     }
 

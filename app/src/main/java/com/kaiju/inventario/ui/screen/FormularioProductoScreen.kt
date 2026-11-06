@@ -166,10 +166,19 @@ fun FormularioProductoScreen(
             ayuda = "Opcional: talla, color, lote, etc."
         )
 
+        formulario.errores["general"]?.let { mensaje ->
+            Text(
+                text = mensaje,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
+
         Button(
             onClick = {
-                if (viewModel.guardarProducto()) {
-                    onProductoGuardado()
+                viewModel.guardarProducto { guardado ->
+                    if (guardado) {
+                        onProductoGuardado()
+                    }
                 }
             },
             modifier = Modifier.fillMaxWidth()

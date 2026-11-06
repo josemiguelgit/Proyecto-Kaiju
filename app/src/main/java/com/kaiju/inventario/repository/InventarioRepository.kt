@@ -1,39 +1,49 @@
 
 package com.kaiju.inventario.repository
 
-import com.kaiju.inventario.model.Movimiento
-import com.kaiju.inventario.model.Producto
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import com.kaiju.inventario.model.Rol
-import com.kaiju.inventario.model.SentidoAjuste
-import com.kaiju.inventario.model.TipoMovimiento
-import com.kaiju.inventario.model.Usuario
+import androidx.room.withTransaction
+import com.kaiju.inventario.data.local.KaijuDatabase
+import com.kaiju.inventario.data.local.toEntity
+import com.kaiju.inventario.data.local.toModel
+import com.kaiju.inventario.model.*
 import java.util.UUID
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.map
 
-class InventarioRepository {
+class InventarioRepository(
+    private val database: KaijuDatabase
+) {
 
-    private val _productos = MutableStateFlow(
-        DatosDePrueba.productos.toList()
-    )
+    private val productoDao = database.productoDao()
+    private val movimientoDao = database.movimientoDao()
 
-    val productos = _productos.asStateFlow()
+    val productos = productoDao.observarProductos().map { lista ->
+        lista.map { it.toModel() }
+    }
 
-    private val _movimientos =
-        MutableStateFlow<List<Movimiento>>(emptyList())
+    val movimientos = movimientoDao.observarMovimientos().map { lista ->
+        lista.map { it.toModel() }
+    }
 
-    val movimientos = _movimientos.asStateFlow()
-
-    fun buscarProducto(codigo: String): Producto? {
-        return _productos.value.find {
-            it.codigo.equals(codigo, ignoreCase = true)
+    // Cargar prendas ficticias solo si la BD está vacía
+    suspend fun inicializarDatos() {
+        database.withTransaction {
+            if (productoDao.contarProductos() == 0) {
+                productoDao.insertarTodos(
+                    DatosDePrueba.productos.map { it.toEntity() }
+                )
+            }
         }
     }
 
-    fun agregarProducto(producto: Producto): Boolean {
+    suspend fun buscarProducto(codigo: String): Producto? {
+        return productoDao.buscarPorCodigo(codigo)?.toModel()
+    }
 
-        if (producto.codigo.isBlank() ||
-            buscarProducto(producto.codigo) != null ||
+    suspend fun agregarProducto(producto: Producto): Boolean {
+        if (
+            producto.codigo.isBlank() ||
+            producto.nombre.trim().length < 3 ||
             producto.precio <= 0 ||
             producto.stockActual < 0 ||
             producto.stockMinimo < 0
@@ -41,40 +51,46 @@ class InventarioRepository {
             return false
         }
 
-        _productos.value = _productos.value + producto
-
-        return true
+        return try {
+            database.withTransaction {
+                if (buscarProducto(producto.codigo) != null) {
+                    false
+                } else {
+                    productoDao.insertar(producto.toEntity())
+                    true
+                }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            false
+        }
     }
 
+    suspend fun editarProducto(producto: Producto): Boolean {
+        return try {
+            database.withTransaction {
+                val anterior = buscarProducto(producto.codigo)
 
-    fun editarProducto(producto: Producto): Boolean {
-
-        val indice = _productos.value.indexOfFirst {
-            it.codigo.equals(
-                producto.codigo,
-                ignoreCase = true
-            )
+                if (
+                    anterior == null ||
+                    producto.precio <= 0 ||
+                    producto.stockMinimo < 0 ||
+                    anterior.stockActual != producto.stockActual
+                ) {
+                    false
+                } else {
+                    productoDao.actualizar(producto.toEntity()) == 1
+                }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            false
         }
-
-        if (indice == -1 ||
-            producto.precio <= 0 ||
-            producto.stockActual < 0 ||
-            producto.stockMinimo < 0 ||
-            producto.stockActual != _productos.value[indice].stockActual
-        ) {
-            return false
-        }
-
-        _productos.value = _productos.value.toMutableList().apply {
-            this[indice] = producto
-        }
-
-        return true
     }
 
-
-    @Synchronized
-    fun registrarMovimiento(
+    suspend fun registrarMovimiento(
         codigoProducto: String,
         tipo: TipoMovimiento,
         cantidad: Int,
@@ -83,7 +99,6 @@ class InventarioRepository {
         usuario: Usuario
     ): String? {
 
-        // Permisos por perfil
         val autorizado = when (usuario.rol) {
             Rol.ADMINISTRADOR -> true
 
@@ -95,11 +110,8 @@ class InventarioRepository {
         }
 
         if (!autorizado) {
-            return "El perfil no tiene permiso para esta operación"
+            return "No tiene permiso para esta operación"
         }
-
-        val producto = buscarProducto(codigoProducto)
-            ?: return "Debe seleccionar un producto válido"
 
         if (cantidad <= 0) {
             return "La cantidad debe ser mayor que cero"
@@ -107,69 +119,85 @@ class InventarioRepository {
 
         if (tipo == TipoMovimiento.AJUSTE) {
             if (motivo.isNullOrBlank()) {
-                return "Debe indicar el motivo del ajuste"
+                return "El ajuste exige un motivo"
             }
+
             if (sentidoAjuste == null) {
-                return "Debe seleccionar el sentido del ajuste"
+                return "Seleccione el sentido del ajuste"
             }
         }
 
-        val variacion = when (tipo) {
-            TipoMovimiento.ENTRADA -> cantidad.toLong()
+        return try {
+            database.withTransaction {
 
-            TipoMovimiento.SALIDA_VENTA,
-            TipoMovimiento.SALIDA_CONSUMO -> -cantidad.toLong()
+                val producto = buscarProducto(codigoProducto)
+                    ?: return@withTransaction "Producto no encontrado"
 
-            TipoMovimiento.AJUSTE ->
-                if (sentidoAjuste == SentidoAjuste.AUMENTO) {
-                    cantidad.toLong()
-                } else {
-                    -cantidad.toLong()
+                val variacion = when (tipo) {
+                    TipoMovimiento.ENTRADA ->
+                        cantidad.toLong()
+
+                    TipoMovimiento.SALIDA_VENTA,
+                    TipoMovimiento.SALIDA_CONSUMO ->
+                        -cantidad.toLong()
+
+                    TipoMovimiento.AJUSTE ->
+                        if (sentidoAjuste == SentidoAjuste.AUMENTO) {
+                            cantidad.toLong()
+                        } else {
+                            -cantidad.toLong()
+                        }
                 }
-        }
 
-        val nuevoStock = producto.stockActual.toLong() + variacion
+                val nuevoStock =
+                    producto.stockActual.toLong() + variacion
 
-        if (nuevoStock < 0) {
-            return "Stock insuficiente para realizar la operación"
-        }
+                if (nuevoStock < 0) {
+                    return@withTransaction "Stock insuficiente"
+                }
 
-        if (nuevoStock > Int.MAX_VALUE) {
-            return "La cantidad supera el máximo permitido"
-        }
+                if (nuevoStock > Int.MAX_VALUE) {
+                    return@withTransaction "Cantidad fuera de rango"
+                }
 
-        val movimiento = Movimiento(
-            id = UUID.randomUUID().toString(),
-            codigoProducto = producto.codigo,
-            tipo = tipo,
-            cantidad = cantidad,
-            motivo = if (tipo == TipoMovimiento.AJUSTE) {
-                motivo?.trim()
-            } else {
-                null
-            },
-            fecha = System.currentTimeMillis(),
-            usuario = usuario.id,
-            sentidoAjuste = if (tipo == TipoMovimiento.AJUSTE) {
-                sentidoAjuste
-            } else {
+                val movimiento = Movimiento(
+                    id = UUID.randomUUID().toString(),
+                    codigoProducto = producto.codigo,
+                    tipo = tipo,
+                    cantidad = cantidad,
+                    motivo = if (tipo == TipoMovimiento.AJUSTE) {
+                        motivo?.trim()
+                    } else {
+                        null
+                    },
+                    fecha = System.currentTimeMillis(),
+                    usuario = usuario.id,
+                    sentidoAjuste =
+                        if (tipo == TipoMovimiento.AJUSTE) {
+                            sentidoAjuste
+                        } else {
+                            null
+                        }
+                )
+
+                val filas = productoDao.actualizar(
+                    producto.copy(
+                        stockActual = nuevoStock.toInt()
+                    ).toEntity()
+                )
+
+                if (filas != 1) {
+                    error("No se pudo actualizar el producto")
+                }
+
+                movimientoDao.insertar(movimiento.toEntity())
+
                 null
             }
-        )
-
-        // Actualizar existencias y registrar trazabilidad
-        _productos.value = _productos.value.map {
-            if (it.codigo == producto.codigo) {
-                it.copy(stockActual = nuevoStock.toInt())
-            } else {
-                it
-            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            "No se pudo guardar el movimiento"
         }
-
-        _movimientos.value = _movimientos.value + movimiento
-
-        return null
     }
-
-
 }
